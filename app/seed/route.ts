@@ -1,4 +1,4 @@
-import bcrypt from "bcryptjs";
+import bcrypt from "bcryptjs"; // 改为纯 JS bcryptjs
 import postgres from "postgres";
 import { invoices, customers, revenue, users } from "../lib/placeholder-data";
 
@@ -17,7 +17,7 @@ async function seedUsers() {
 
   const insertedUsers = await Promise.all(
     users.map(async (user) => {
-      const hashedPassword = await bcrypt.hash(user.password, 10);
+      const hashedPassword = bcrypt.hashSync(user.password, 10); // bcryptjs 可同步
       return sql`
         INSERT INTO users (id, name, email, password)
         VALUES (${user.id}, ${user.name}, ${user.email}, ${hashedPassword})
@@ -42,7 +42,7 @@ async function seedInvoices() {
     );
   `;
 
-  const insertedInvoices = await Promise.all(
+  return Promise.all(
     invoices.map(
       (invoice) => sql`
         INSERT INTO invoices (customer_id, amount, status, date)
@@ -51,8 +51,6 @@ async function seedInvoices() {
       `
     )
   );
-
-  return insertedInvoices;
 }
 
 async function seedCustomers() {
@@ -67,7 +65,7 @@ async function seedCustomers() {
     );
   `;
 
-  const insertedCustomers = await Promise.all(
+  return Promise.all(
     customers.map(
       (customer) => sql`
         INSERT INTO customers (id, name, email, image_url)
@@ -76,8 +74,6 @@ async function seedCustomers() {
       `
     )
   );
-
-  return insertedCustomers;
 }
 
 async function seedRevenue() {
@@ -88,7 +84,7 @@ async function seedRevenue() {
     );
   `;
 
-  const insertedRevenue = await Promise.all(
+  return Promise.all(
     revenue.map(
       (rev) => sql`
         INSERT INTO revenue (month, revenue)
@@ -97,21 +93,30 @@ async function seedRevenue() {
       `
     )
   );
-
-  return insertedRevenue;
 }
 
 export async function GET() {
   try {
-    const result = await sql.begin((sql) => [
-      seedUsers(),
-      seedCustomers(),
-      seedInvoices(),
-      seedRevenue(),
-    ]);
+    // 串行执行种子数据
+    await sql.begin(async (sqlTx) => {
+      await seedUsers();
+      await seedCustomers();
+      await seedInvoices();
+      await seedRevenue();
+    });
 
-    return Response.json({ message: "Database seeded successfully" });
+    return new Response(
+      JSON.stringify({ message: "Database seeded successfully" }),
+      {
+        status: 200,
+      }
+    );
   } catch (error) {
-    return Response.json({ error }, { status: 500 });
+    return new Response(
+      JSON.stringify({ error: (error as any).message || error }),
+      {
+        status: 500,
+      }
+    );
   }
 }
